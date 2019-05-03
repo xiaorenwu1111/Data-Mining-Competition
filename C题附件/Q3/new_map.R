@@ -1,0 +1,104 @@
+files='C://Users//liyufang//Desktop//泰迪杯-车辆行为分析//13000123sgik//第七届泰迪杯赛题C题-全部数据//附件1-全部数据-450辆车'
+dir_name=dir(files,recursive=T)
+result=data.frame(车牌号=substr(dir_name,1,7),大暴雨=0,暴雨=0,大雨=0,中雨=0,小雨=0,雾=0,雪=0,无雨=0,浮尘=0,强风=0,大风=0,暴风=0,台风=0,无风=0,评分=0)
+weather=read.csv("C://Users//liyufang//Desktop//泰迪杯-车辆行为分析//13000123sgik//第七届泰迪杯赛题C题-全部数据//附件2-气象数据.csv",header=T,sep=",")
+weather$deatail_location=NA
+weather$deatail_location=paste(weather$province,weather$prefecture_city,weather$county,sep="")
+weather$record_date=as.character(as.Date(weather$record_dat,"%d/%m/%Y"))
+location=read.csv("F://泰迪杯数学建模大赛//第七届泰迪杯赛题C题-全部数据//经纬度-地理位置对应表.csv",header=T,sep=",")
+library(dplyr)
+weather_location=left_join(weather,location,by="deatail_location")
+weather_location$lng=round(weather_location$lng,3)
+weather_location$lat=round(weather_location$lat,3)
+colnames(weather_location)[11]<-"date"
+#雨量检测函数
+n_big_storm_rain=function(conditions){
+  n=length(grep("*大暴雨*",conditions,value=T))
+  return(n)
+}
+n_storm_rain=function(conditions){
+  n=length(grep("*暴雨*",conditions,value=T))
+  return(n)
+}
+n_big_rain=function(conditions){
+  n=lenght(grep("*大雨*",conditions,value=T))
+  return(n)
+}
+n_middle_rain=function(conditions){
+  n=length(grep("*中雨*",conditions,value=T))
+  return(n)
+}
+n_small_rain=function(conditions){
+  n=length(grep("*小雨*",conditions,value=T))
+  return(n)
+}
+n_fog=function(conditions){
+  n=length(grep("*雾*",conditions,value=T))
+  return(n)
+}
+
+n_snow=function(conditions){
+  n=length(grep("*雪*",conditions,value=T))
+  return(n)
+}
+sunny=function(conditions){
+  n=length(grep("*晴|多云|阴*",conditions,value=T))
+  return(n)
+}
+n_fly_ash=function(conditions){
+  n=length(grep("*浮尘|扬沙*",conditions,value=T))
+  return(n)
+}
+
+#定义检测风力的函数
+no_wind=function(wind_power){
+  n=length(grep("1|2|3|4|5",wind_power,value=T))
+  return(n)
+}
+strong_breeze=function(wind_power){
+  n=length(grep("6|7",wind_power,value=T))
+  return(n)
+}
+big_breeze=function(wind_power){
+  n=length(grep("8|9|10",wind_power,value=T))
+  return(n)
+}
+storm_breeze=function(wind_power){
+  n=length(grep("11",wind_power,value=T))
+  return(n)
+}
+typhoon=function(wind_power){
+  n=length(grep("12|13|14|15|16",wind_power,value=T))
+  return(n)
+}
+i=3
+for(i in 1:450){
+  print(i)
+  car=read.csv(paste(files,'/',dir_name[i],sep=''))
+  car$lng=round(car$lng,3)
+  car$lat=round(car$lat,3)
+  library(stringr)
+  car$location_time=str_split_fixed(as.character(car$location_time)," ", 2)
+  write.csv(car,"C://Users//liyufang//Desktop//泰迪杯-车辆行为分析//car.csv")
+  car_dealt=read.csv("C://Users//liyufang//Desktop//泰迪杯-车辆行为分析//car.csv",header=T,sep=",")
+  car_dealt=car_dealt[,-1]
+  car_dealt$location_time.1=as.Date(car_dealt$location_time.1)
+  colnames(car_dealt)[11]<-"date"
+  final_data=merge(car_dealt,weather_location,by=c("lng",'lat',"date"))
+  result$无雨[i]=sunny(final_data$conditions)
+  result$暴雨[i]=n_storm_rain(final_data$conditions)
+  result$大雨[i]=n_big_rain(final_data$conditions)
+  result$中雨[i]=n_middle_rain(final_data$conditions)
+  result$小雨[i]=n_small_rain(final_data$conditions)
+  result$雾[i]=n_fog(final_data$conditions)
+  result$雪[i]=n_snow(final_data$conditions)
+  result$浮尘[i]=n_fly_ash(final_data$conditions)
+  result$强风[i]=strong_breeze(final_data$wind_power)
+  result$大风[i]=big_breeze(final_data$wind_power)
+  result$暴风[i]=storm_breeze(final_data$wind_power)
+  result$台风[i]=typhoon(final_data$wind_power)
+  result$无风[i]=no_wind(final_data$wind_power)
+  result$评分[i]=4*result$大暴雨[i]+3.5*result$暴雨[i]+3*result$大雨[i]+2*result$中雨[i]+1*result$小雨[i]+5*result$雾[i]+4*result$雪[i]+1*result$浮尘[i]+2.5*result$强风[i]+
+    3*result$大风[i]+ 3.5*result$暴风[i]+4*result$台风[i]+0.5*result$无雨[i]+0.5*result$无风[i]
+}
+write.csv(result,"C://Users//liyufang//Desktop//泰迪杯-车辆行为分析//final_weather_result.csv")

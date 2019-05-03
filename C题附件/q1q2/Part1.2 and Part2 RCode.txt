@@ -1,0 +1,169 @@
+files='Dcar' #文件夹
+dir_name=dir(files,recursive=T) #所有表格名
+
+#计算疲劳驾驶时间
+fatigue_driving=function(speed,time,threshold){
+  N=length(speed)
+  speed=ifelse(speed0,1,0)
+  diff=speed[-1]-speed[-N]
+  start=which(diff==1)+1
+  end=which(diff==-1)
+  if(speed[1]==1){
+    start=c(1,start)
+  }
+  if(speed[N]==1){
+    end=c(end,N)
+  }
+  if(length(start)0){
+    start_end=data.frame(start=time[start],end=time[end],dtime=0)
+    if(nrow(start_end)=2){
+      for(i in nrow(start_end)2){
+        if(as.numeric(difftime(start_end$start[i],start_end$end[i-1],units='mins'))20){
+          start_end$end[i-1]=start_end$end[i]
+          start_end=start_end[-i,]
+        }
+      }
+    }
+    start_end$dtime=as.numeric(difftime(start_end$end,start_end$start,units='hours'))
+    sum=round(sum(start_end$dtime[start_end$dtime=threshold]-threshold),digit=2)
+  }else{
+    sum=0
+  }
+  return(sum)
+}
+#计算怠速行驶时间
+idling=function(acc_state,speed,time,threshold){
+  valid=which(acc_state==1&speed==0)
+  sep=which((valid[-1]-valid[-length(valid)])!=1)
+  stoptime=as.numeric(difftime(time[valid[sep[1]]],time[valid[1]],units='hours'))
+  for(i in 2length(sep)){
+    stoptime=c(stoptime,as.numeric(difftime(time[valid[sep[i]]],time[valid[sep[i-1]+1]],units='hours')))
+  }
+  stoptime=c(stoptime,as.numeric(difftime(time[valid[length(valid)]],time[valid[sep[length(sep)]+1]],units='hours')))
+  stoptime=stoptime[stoptime!=0]
+  sum=round(sum(stoptime[stoptime=threshold]-threshold),digit=2)
+  return(sum)
+}
+#计算急加速，急减速次数
+fast_change_speed=function(dtime,acc,threshold){
+  bad=which(ifelse(threshold0,1,-1)acc=abs(threshold))
+  if(length(bad)1){
+    n=ifelse(dtime[bad[1]]1,1,0)
+    flag=ifelse(dtime[bad[1]]1,1,0)
+    for(i in 2length(bad)){
+      if(flag==0){
+        if((bad[i]-bad[i-1])==1dtime[bad[i]]1){
+          flag=1
+          n=n+1
+        }
+      }else{
+        if((bad[i]-bad[i-1])1&&dtime[bad[i]]==1){
+          flag=0
+        }
+      }
+    }
+    return(n)
+  }else{
+    return(0)
+  }
+}
+#计算熄火滑行次数
+slide_off=function(acc_state,mileage){
+  N=length(acc_state)
+  diff=acc_state[-1]-acc_state[-N]
+  start=which(diff==-1)+1
+  end=which(diff==1)
+  if(acc_state[1]==0){
+    start=c(1,start)
+  }
+  if(acc_state[N]==0){
+    end=c(end,N)
+  }
+  start_end=data.frame(start=mileage[start],end=mileage[end],dmileage=mileage[end]-mileage[start])
+  n=sum(start_end$dmileage!=0)
+  return(n)
+}
+
+#问题一
+target=c(2,69,115,117,141,159,292,338,348,401) #10辆目标车辆
+condition=data.frame(车牌号=0,阶段数=0,行车里程=0,平均行车速度=0,急加速次数=0,急减速次数=0) #10辆车各阶段统计表
+for(i in 110){
+  print(i)
+  car=read.csv(paste(files,'',dir_name[target[i]],sep=''))
+  car=unique(car)
+  car=car[,-c(1,2)]
+  car$location_time=as.POSIXct(as.character(car$location_time))
+  n=nrow(car)
+  dtime=c(0,as.numeric(difftime(car$location_time[-1],car$location_time[-n],units='secs')))
+  dspeed=c(0,car$gps_speed[-1]-car$gps_speed[-n])
+  acc=c(0,round(dspeed[-1]dtime[-1],digit=2))
+  break_time=c(1,which(dtime=3600),n+1)
+  n_stage=length(break_time)-1
+  stage=rep(1n_stage,break_time[-1]-break_time[-n_stage-1])
+  dtime[break_time[-n_stage-1]]=0
+  dspeed[break_time[-n_stage-1]]=0
+  acc[break_time[-n_stage-1]]=0
+  car$acc_state[break_time-1]=0
+  car$gps_speed[break_time-1]=0
+  
+  newcondition=data.frame(车牌号=substr(dir_name[target[i]],1,7),阶段数=rep(0,n_stage),行车里程=0,平均行车速度=0,急加速次数=0,急减速次数=0)
+  for(j in n_stage1){
+    ucar=car[break_time[j](break_time[j+1]-1),]
+    udtime=dtime[break_time[j](break_time[j+1]-1)]
+    uacc=acc[break_time[j](break_time[j+1]-1)]
+    newcondition$行车里程[j]=ucar$mileage[nrow(ucar)]-ucar$mileage[1]
+    if(newcondition$行车里程[j]0){
+      newcondition$平均行车速度[j]=round(newcondition$行车里程[j]as.numeric(difftime(ucar$location_time[nrow(ucar)],ucar$location_time[1],units='hours')),digit=2)
+      newcondition$急加速次数[j]=fast_change_speed(udtime,uacc,8)
+      newcondition$急减速次数[j]=fast_change_speed(udtime,uacc,-8)
+    }else{
+      newcondition=newcondition[-j,]
+    }
+  }
+  newcondition$阶段数=1nrow(newcondition)
+  condition=rbind(condition,newcondition)
+}
+condition=condition[-1,]
+  
+
+
+#问题二
+result=data.frame(车牌号=substr(dir_name,1,7),总记录时间=0,总里程数=0,疲劳驾驶时间=0,怠速时间=0,
+                     急加速次数=0,急减速次数=0,熄火滑行次数=0,每小时疲劳驾驶时间=0,每小时怠速时间=0,
+                     每千公里急加速次数=0,每千公里急减速次数=0,每千公里熄火滑行次数=0,评分=0) #所有车辆评分统计表
+for(i in 1length(dir_name)){
+  print(i)
+  car=read.csv(paste(files,'',dir_name[i],sep=''))
+  car=unique(car)
+  car=car[,-c(1,2)]
+  car$location_time=as.POSIXct(as.character(car$location_time))
+  n=nrow(car)
+  dtime=c(0,as.numeric(difftime(car$location_time[-1],car$location_time[-n],units='secs')))
+  dspeed=c(0,car$gps_speed[-1]-car$gps_speed[-n])
+  acc=c(0,round(dspeed[-1]dtime[-1],digit=2))
+  break_time=c(1,which(dtime=3600),n+1)
+  n_stage=length(break_time)-1
+  dtime[break_time[-n_stage-1]]=0
+  dspeed[break_time[-n_stage-1]]=0
+  acc[break_time[-n_stage-1]]=0
+  car$acc_state[break_time-1]=0
+  car$gps_speed[break_time-1]=0
+  
+  result$总记录时间[i]=round(sum(as.numeric(difftime(car$location_time[break_time[-1]-1],
+                                                car$location_time[break_time[-n_stage-1]],units='hours'))),digit=2)
+  result$总里程数[i]=car$mileage[n]-car$mileage[1]
+  result$疲劳驾驶时间[i]=fatigue_driving(car$gps_speed,car$location_time,4)
+  result$怠速时间[i]=idling(car$acc_state,car$gps_speed,car$location_time,560)
+  result$急加速次数[i]=fast_change_speed(dtime,acc,8)
+  result$急减速次数[i]=fast_change_speed(dtime,acc,-8)
+  result$熄火滑行次数[i]=slide_off(car$acc_state,car$mileage)
+}
+result$每小时疲劳驾驶时间=round(result$疲劳驾驶时间result$总记录时间,digit=2)
+result$每小时怠速时间=round(result$怠速时间result$总记录时间,digit=2)
+result$每千公里急加速次数=round(result$急加速次数as.numeric(ifelse(result$总里程数!=0,result$总里程数,1))1000,digit=2)
+result$每千公里急减速次数=round(result$急减速次数as.numeric(ifelse(result$总里程数!=0,result$总里程数,1))1000,digit=2)
+result$每千公里熄火滑行次数=round(result$熄火滑行次数as.numeric(ifelse(result$总里程数!=0,result$总里程数,1))1000,digit=2)
+result$评分=round(as.matrix(result[,913])%%(1colMeans(result[,913])),digit=2)
+result=result[order(-result$评分),]
+
+
